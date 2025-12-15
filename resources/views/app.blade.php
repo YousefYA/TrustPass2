@@ -1,10 +1,8 @@
 <!DOCTYPE html>
-<html>
-<body>
-    <h1 style="color:red">Blade is rendering</h1>
-    <div id="app"></div>
-    <meta charset="utf-8">
-    <title>TrustPass</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     @vite(['resources/js/app.js'])
 </head>
 <body>

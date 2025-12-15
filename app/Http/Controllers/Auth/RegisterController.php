@@ -9,27 +9,22 @@ use Illuminate\Http\Request;
 class RegisterController extends Controller
 {
     public function store(Request $request)
-    {
-        logger()->info('REGISTER PAYLOAD', $request->all());
+{
+    logger()->info('REGISTER PAYLOAD', $request->all());
 
-        $validated = $request->validate([
+    $validated = $request->validate([
         'email' => 'required|email|unique:users,email',
-        'salt1' => 'required',
-        'salt2' => 'required',
-        'password_verifier' => 'required',
-        'encrypted_vault' => 'required',
-        'encrypted_master_key' => 'required',
+        'first_name' => 'nullable|string|max:50',
+        'last_name' => 'nullable|string|max:50',
+        'salt1' => 'required|string',
+        'salt2' => 'required|string',
+        'password_verifier' => 'required|string',
+        'encrypted_vault' => 'required|string',
+        'encrypted_master_key' => 'required|string',
     ]);
 
-        User::create([
-            'email' => $validated['email'],
-            'salt1' => $validated['salt1'],
-            'salt2' => $validated['salt2'],
-            'password_verifier' => $validated['password_verifier'],
-            'encrypted_vault' => $validated['encrypted_vault'],
-            'encrypted_master_key' => $validated['encrypted_master_key'],
-        ]);
+    User::create($validated);
 
-        return response()->json(['status' => 'ok'], 201);
+    return response()->json(['status' => 'ok'], 201);
     }
 }

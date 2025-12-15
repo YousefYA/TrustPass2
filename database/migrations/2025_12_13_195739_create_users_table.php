@@ -27,6 +27,9 @@ return new class extends Migration {
             $table->string('mfa_type')->nullable();
             $table->string('device_fingerprint')->nullable();
 
+            $table->string('first_name')->nullable();
+            $table->string('last_name')->nullable();
+
             $table->timestamps();
         });
     }
