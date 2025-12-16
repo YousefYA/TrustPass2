@@ -75,7 +75,6 @@ async function login() {
     error.value = null;
 
     try {
-        // STEP 1: get salt
         const initRes = await axios.post("/api/login/init", {
             email: email.value,
         });
@@ -84,19 +83,16 @@ async function login() {
             c.charCodeAt(0)
         );
 
-        // STEP 2: derive key locally (never sent)
         deriveKey(password.value, salt1);
 
-        // STEP 3: create proof
         const verifier = createVerifier(password.value, salt1);
 
-        // STEP 4: verify
-        await axios.post("/api/login/verify", {
+        await axios.post("/login/verify", {
             email: email.value,
             password_verifier: verifier,
         });
 
-        // SUCCESS → vault
+        // 5️⃣ Redirect
         window.location.href = "/vault";
     } catch {
         error.value = "Invalid email or password";
