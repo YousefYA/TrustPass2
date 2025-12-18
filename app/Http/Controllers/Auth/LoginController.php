@@ -3,56 +3,72 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail; // ✅ REQUIRED
+use App\Mail\OtpMail;                // ✅ REQUIRED
 
-class LoginController extends Controller
+class EmailOtpController extends Controller
 {
-    public function init(Request $request)
-    {
-        $request->validate(['email' => 'required|email']);
-
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user) {
-            return response()->json(['error' => 'Invalid credentials'], 404);
-        }
-
-        return response()->json([
-            'salt1' => $user->salt1,
-        ]);
-    }
-
-    public function verify(Request $request)
+    public function send(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
-            'password_verifier' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $code = random_int(100000, 999999);
 
-        if (
-            !$user ||
-            !hash_equals($user->password_verifier, $request->password_verifier)
-        ) {
-            return response()->json(['error' => 'Invalid credentials'], 401);
+        // Invalidate old OTPs
+        DB::table('email_otps')
+            ->where('email', $request->email)
+            ->whereNull('used_at')
+            ->update(['used_at' => now()]);
+
+        // Create new OTP
+        DB::table('email_otps')->insert([
+            'email' => $request->email,
+            'code_hash' => hash('sha256', $code),
+            'expires_at' => now()->addMinutes(10),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // ❌ OLD LOGGING CODE (Remove this line)
+        // logger()->info("OTP for {$request->email}: {$code}");
+
+        // ✅ NEW SENDING CODE (Add this line)
+        try {
+             Mail::to($request->email)->send(new OtpMail($code));
+        } catch (\Exception $e) {
+             return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        // ✅ SESSION
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return response()->json(['status' => 'ok']);
+        return response()->json(['status' => 'otp_sent']);
     }
 
-    public function logout(Request $request)
+    // ... (Keep your verify function exactly as it is) ...
+    public function verify(Request $request)
     {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // (Paste your existing verify logic here)
+        $request->validate([
+            'email' => 'required|email',
+            'code' => 'required|string',
+        ]);
 
-        return response()->json(['status' => 'logged_out']);
+        $otp = DB::table('email_otps')
+            ->where('email', $request->email)
+            ->whereNull('used_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$otp || !hash_equals($otp->code_hash, hash('sha256', $request->code))) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 401);
+        }
+
+        DB::table('email_otps')->where('id', $otp->id)->update(['used_at' => now()]);
+        session(['otp_verified_email' => $request->email]);
+
+        return response()->json(['status' => 'verified']);
     }
 }
