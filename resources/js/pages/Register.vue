@@ -2,7 +2,7 @@
     <div class="stage">
         <div class="card-wrap">
             <div class="card">
-                <!-- Brand -->
+                <!-- BRAND (unchanged) -->
                 <div class="brand">
                     <div class="logo">
                         <svg
@@ -19,26 +19,20 @@
                     </div>
 
                     <h1>TRUSTPASS</h1>
-                    <h2>Create Account</h2>
+                    <h2 v-if="step === 'form'">Create Account</h2>
+                    <h2 v-if="step === 'otp'">Verify Email</h2>
+
                     <div class="subtitle">Zero-knowledge password manager</div>
                 </div>
 
-                <!-- Form -->
-                <form @submit.prevent="submit">
+                <!-- REGISTRATION FORM -->
+                <form v-if="step === 'form'" @submit.prevent="startOtp">
                     <div class="field">
-                        <input
-                            v-model="firstName"
-                            type="text"
-                            placeholder="First name"
-                        />
+                        <input v-model="firstName" placeholder="First name" />
                     </div>
 
                     <div class="field">
-                        <input
-                            v-model="lastName"
-                            type="text"
-                            placeholder="Last name"
-                        />
+                        <input v-model="lastName" placeholder="Last name" />
                     </div>
 
                     <div class="field">
@@ -75,24 +69,36 @@
                     </div>
 
                     <button class="cta" type="submit">
-                        <span class="overlay"></span>
                         <span>Create Account</span>
                     </button>
-
-                    <p
-                        v-if="error"
-                        class="text-red-400 text-sm mt-3 text-center"
-                    >
-                        {{ error }}
-                    </p>
-
-                    <p
-                        v-if="success"
-                        class="text-green-400 text-sm mt-3 text-center"
-                    >
-                        Registration successful
-                    </p>
                 </form>
+
+                <!-- OTP SCREEN (same card, minimal change) -->
+                <form v-if="step === 'otp'" @submit.prevent="verifyOtp">
+                    <div class="field">
+                        <input
+                            v-model="otp"
+                            placeholder="Enter verification code"
+                            required
+                        />
+                    </div>
+
+                    <button class="cta" type="submit">
+                        <span>Verify Code</span>
+                    </button>
+                </form>
+
+                <!-- STATUS MESSAGES -->
+                <p v-if="error" class="text-red-400 text-sm mt-3 text-center">
+                    {{ error }}
+                </p>
+
+                <p
+                    v-if="success"
+                    class="text-green-400 text-sm mt-3 text-center"
+                >
+                    Registration successful
+                </p>
 
                 <div class="glow-l"></div>
                 <div class="glow-r"></div>
@@ -100,51 +106,53 @@
         </div>
     </div>
 </template>
-
 <script setup>
 import { ref } from "vue";
 import axios from "axios";
 
-// 🔐 crypto modules (same as old working version)
 import { deriveKey } from "../crypto/kdf";
 import { createVerifier } from "../crypto/verifier";
 import { encrypt } from "../crypto/encrypt";
+axios.defaults.withCredentials = true;
 
-// form state
+// UI state
+const step = ref("form"); // form → otp → done
+const error = ref(null);
+const success = ref(false);
+
+// Form data
 const firstName = ref("");
 const lastName = ref("");
 const email = ref("");
 const password = ref("");
 const recoveryAnswer = ref("");
 const showPwd = ref(false);
+const otp = ref("");
 
-// ui state
-const error = ref(null);
-const success = ref(false);
+// Crypto payload cache (important)
+let payload = null;
 
-async function submit() {
+/**
+ * STEP 1: Send OTP (NO registration yet)
+ */
+async function startOtp() {
     error.value = null;
-    success.value = false;
 
     try {
-        // 1️⃣ generate salts
+        // Prepare crypto ONCE
         const salt1 = crypto.getRandomValues(new Uint8Array(16));
         const salt2 = crypto.getRandomValues(new Uint8Array(16));
 
-        // 2️⃣ derive keys (ZERO-KNOWLEDGE)
         const masterKey = deriveKey(password.value, salt1);
         const recoveryKey = deriveKey(recoveryAnswer.value, salt2);
 
-        // 3️⃣ encrypt vault + master key
         const emptyVault = new TextEncoder().encode("{}");
         const encryptedVault = await encrypt(masterKey, emptyVault);
         const encryptedMasterKey = await encrypt(recoveryKey, masterKey);
 
-        // 4️⃣ password verifier
         const verifier = createVerifier(password.value, salt1);
 
-        // 5️⃣ send payload backend expects
-        await axios.post("/api/register", {
+        payload = {
             email: email.value,
             first_name: firstName.value || null,
             last_name: lastName.value || null,
@@ -153,14 +161,36 @@ async function submit() {
             password_verifier: verifier,
             encrypted_vault: JSON.stringify(encryptedVault),
             encrypted_master_key: JSON.stringify(encryptedMasterKey),
+        };
+
+        // Send OTP only
+        await axios.post("/api/otp/send", { email: email.value });
+
+        step.value = "otp";
+    } catch {
+        error.value = "Failed to send verification code";
+    }
+}
+
+/**
+ * STEP 2: Verify OTP → Register
+ */
+async function verifyOtp() {
+    error.value = null;
+
+    try {
+        await axios.post("/api/otp/verify", {
+            email: email.value,
+            code: otp.value,
         });
 
+        // Now register (OTP session exists)
+        await axios.post("/api/register", payload);
+
         success.value = true;
-    } catch (e) {
-        error.value =
-            e.response?.data?.errors?.email?.[0] ||
-            e.response?.data?.message ||
-            "Registration failed";
+        step.value = "done";
+    } catch {
+        error.value = "Invalid or expired verification code";
     }
 }
 </script>

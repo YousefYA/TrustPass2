@@ -1,54 +1,34 @@
 <?php
-<<<<<<< HEAD
-
-use Illuminate\Support\Facades\Route;
-
-/*
-|--------------------------------------------------------------------------
-| Landing page (default)
-|--------------------------------------------------------------------------
-*/
-Route::get('/', function () {
-    return view('landing');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Vue SPA entry (login / register / vault)
-|--------------------------------------------------------------------------
-*/
-Route::get('/{any}', function () {
-    return view('app');
-})->where('any', 'login|register|vault');
-=======
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\EmailOtpController;
 
-/*
-|--------------------------------------------------------------------------
-| Landing page
-|--------------------------------------------------------------------------
-*/
-Route::get('/', fn () => view('landing'));
+Route::post('/otp/send', [EmailOtpController::class, 'send']);
+Route::post('/otp/verify', [EmailOtpController::class, 'verify']);
+Route::get('/', function () {
+    // This uses the closure syntax from the first block
+    return view('landing');
+});
 
-/*
-|--------------------------------------------------------------------------
-| Vue SPA entry
-|--------------------------------------------------------------------------
-*/
-Route::get('/{any}', fn () => view('app'))
-    ->where('any', 'login|register|vault');
+Route::get('/{any}', function () {
+    return view('app');
+})->where('any', 'login|register|vault');
+
 
 /*
 |--------------------------------------------------------------------------
 | Session-based authentication (WEB)
 |--------------------------------------------------------------------------
+| These routes handle the authentication process.
 */
+
+// POST route for verifying the login (e.g., OTP verification)
 Route::post('/login/verify', [LoginController::class, 'verify']);
 
+// POST route for logging out the user
 Route::post('/logout', function (Request $request) {
     Auth::logout();
     $request->session()->invalidate();
@@ -57,5 +37,5 @@ Route::post('/logout', function (Request $request) {
     return response()->json(['status' => 'logged_out']);
 });
 
+// GET route to check the currently authenticated user
 Route::middleware('auth')->get('/me', fn () => auth()->user());
->>>>>>> 9d6c5fc (session is handled and corrected now)
