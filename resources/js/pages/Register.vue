@@ -25,16 +25,11 @@
                 </div>
 
                 <form v-if="step === 'form'" @submit.prevent="startOtp">
-                    <div class="field-row">
-                        <div class="field">
-                            <input
-                                v-model="firstName"
-                                placeholder="First name"
-                            />
-                        </div>
-                        <div class="field">
-                            <input v-model="lastName" placeholder="Last name" />
-                        </div>
+                    <div class="field">
+                        <input v-model="firstName" placeholder="First name" />
+                    </div>
+                    <div class="field">
+                        <input v-model="lastName" placeholder="Last name" />
                     </div>
 
                     <div class="field">
@@ -46,19 +41,51 @@
                         />
                     </div>
 
-                    <div class="field">
+                    <div class="field input-with-icon">
                         <input
                             :type="showPwd ? 'text' : 'password'"
                             v-model="password"
-                            placeholder="Master Password (min 12 chars)"
+                            placeholder="Master Password"
                             required
                         />
                         <button
                             type="button"
                             class="eye-btn"
                             @click="showPwd = !showPwd"
+                            tabindex="-1"
                         >
-                            {{ showPwd ? "🙈" : "👁️" }}
+                            <svg
+                                v-if="!showPwd"
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                                ></path>
+                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                            </svg>
+                            <svg
+                                v-else
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M1 12s4-8 11-8 11 8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                                ></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
                         </button>
                     </div>
 
@@ -71,25 +98,28 @@
                         />
                     </div>
 
-                    <div class="password-requirements" v-if="password">
-                        <p :class="{ valid: password.length >= 12 }">
-                            • At least 12 characters
-                        </p>
-                        <p
-                            :class="{
-                                valid:
-                                    password === passwordConfirm &&
-                                    passwordConfirm.length > 0,
-                            }"
-                        >
-                            • Passwords match
-                        </p>
+                    <div
+                        class="password-checklist"
+                        :class="{ active: password.length > 0 }"
+                    >
+                        <div class="check-item" :class="{ met: isLengthMet }">
+                            <span class="icon"></span> At least 12 characters
+                        </div>
+                        <div class="check-item" :class="{ met: hasNumber }">
+                            <span class="icon"></span> Includes a number
+                        </div>
+                        <div class="check-item" :class="{ met: hasSymbol }">
+                            <span class="icon"></span> Includes a symbol
+                        </div>
+                        <div class="check-item" :class="{ met: isMatch }">
+                            <span class="icon"></span> Passwords match
+                        </div>
                     </div>
 
                     <div class="field">
                         <input
                             v-model="recoveryAnswer"
-                            placeholder="Recovery Phrase (for account recovery)"
+                            placeholder="Recovery Phrase (Save this safely!)"
                             required
                         />
                     </div>
@@ -107,22 +137,20 @@
                             required
                         />
                     </div>
-
                     <button class="cta" type="submit">
                         <span>Verify Code</span>
                     </button>
                 </form>
 
-                <p v-if="error" class="text-red-400 text-sm mt-3 text-center">
-                    {{ error }}
-                </p>
+                <transition name="fade">
+                    <p v-if="error" class="status-msg error">{{ error }}</p>
+                </transition>
 
-                <p
-                    v-if="success"
-                    class="text-green-400 text-sm mt-3 text-center"
-                >
-                    Registration successful! Redirecting...
-                </p>
+                <transition name="fade">
+                    <p v-if="success" class="status-msg success">
+                        Registration successful! Redirecting...
+                    </p>
+                </transition>
 
                 <div class="glow-l"></div>
                 <div class="glow-r"></div>
@@ -132,7 +160,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue"; // ✅ Import computed
 import { useRouter } from "vue-router";
 import axios from "axios";
 
@@ -153,39 +181,46 @@ const firstName = ref("");
 const lastName = ref("");
 const email = ref("");
 const password = ref("");
-const passwordConfirm = ref(""); // ✅ Added confirmation
+const passwordConfirm = ref("");
 const recoveryAnswer = ref("");
 const showPwd = ref(false);
 const otp = ref("");
 
-// Crypto payload cache
 let payload = null;
 
-/**
- * STEP 1: Validate & Send OTP
- */
+// ✅ COMPUTED PROPERTIES (Prevents Regex Errors in Template)
+const isLengthMet = computed(() => password.value.length >= 12);
+const hasNumber = computed(() => /[0-9]/.test(password.value));
+const hasSymbol = computed(() => /[!@#$%^&*(),.?":{}|<>]/.test(password.value));
+const isMatch = computed(
+    () =>
+        password.value === passwordConfirm.value &&
+        passwordConfirm.value.length > 0
+);
+
 async function startOtp() {
     error.value = null;
 
-    // 🔒 NIST & Validation Checks
-    if (password.value.length < 12) {
+    // 🔒 Strict Validation using the computed props
+    if (!isLengthMet.value) {
         error.value =
-            "Password is too short. NIST guidelines recommend at least 12 characters.";
+            "Password must be at least 12 characters (NIST Guideline).";
         return;
     }
-
-    if (password.value.length > 128) {
-        error.value = "Password is too long (max 128 characters).";
+    if (!hasNumber.value) {
+        error.value = "Password must include at least one number.";
         return;
     }
-
-    if (password.value !== passwordConfirm.value) {
+    if (!hasSymbol.value) {
+        error.value = "Password must include at least one special character.";
+        return;
+    }
+    if (!isMatch.value) {
         error.value = "Passwords do not match.";
         return;
     }
 
     try {
-        // Prepare crypto ONCE
         const salt1 = crypto.getRandomValues(new Uint8Array(16));
         const salt2 = crypto.getRandomValues(new Uint8Array(16));
 
@@ -195,7 +230,6 @@ async function startOtp() {
         const emptyVault = new TextEncoder().encode("{}");
         const encryptedVault = await encrypt(masterKey, emptyVault);
         const encryptedMasterKey = await encrypt(recoveryKey, masterKey);
-
         const verifier = createVerifier(password.value, salt1);
 
         payload = {
@@ -209,34 +243,24 @@ async function startOtp() {
             encrypted_master_key: JSON.stringify(encryptedMasterKey),
         };
 
-        // Send OTP only
         await axios.post("/api/otp/send", { email: email.value });
-
         step.value = "otp";
     } catch {
-        error.value = "Failed to send verification code. Check your network.";
+        error.value = "Failed to send verification code. Check network.";
     }
 }
 
-/**
- * STEP 2: Verify OTP → Register
- */
 async function verifyOtp() {
     error.value = null;
-
     try {
         await axios.post("/api/otp/verify", {
             email: email.value,
             code: otp.value,
         });
-
-        // Now register (OTP session exists)
         await axios.post("/api/register", payload);
 
         success.value = true;
         step.value = "done";
-
-        // Redirect to vault after delay
         setTimeout(() => {
             router.push("/vault");
         }, 2000);
@@ -247,26 +271,95 @@ async function verifyOtp() {
 </script>
 
 <style scoped>
-/* Optional: Add this to your CSS for the hints */
-.password-requirements {
-    font-size: 0.8rem;
+/* 1. Layout Fixes */
+.field {
+    position: relative;
     margin-bottom: 15px;
-    text-align: left;
-    padding-left: 5px;
-    color: #666;
 }
-.password-requirements p {
-    margin: 2px 0;
-    transition: color 0.3s ease;
-}
-.password-requirements p.valid {
-    color: #4ade80; /* Green */
-}
-.field-row {
+
+/* 2. Professional Icons */
+.eye-btn {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6b7280;
+    transition: color 0.2s;
+    padding: 0;
     display: flex;
-    gap: 10px;
+    align-items: center;
 }
-.field-row .field {
-    flex: 1;
+.eye-btn:hover {
+    color: #4f46e5;
+}
+
+/* 3. Animated Password Checklist */
+.password-checklist {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-out, opacity 0.4s;
+    opacity: 0;
+    margin-bottom: 0;
+}
+.password-checklist.active {
+    max-height: 200px; /* Expands smoothly */
+    opacity: 1;
+    margin-bottom: 20px;
+}
+
+.check-item {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateX(0);
+}
+
+/* The little circle icon */
+.check-item .icon {
+    width: 6px;
+    height: 6px;
+    background-color: #374151;
+    border-radius: 50%;
+    margin-right: 10px;
+    transition: all 0.3s ease;
+}
+
+/* When requirement is MET */
+.check-item.met {
+    color: #10b981; /* Green */
+    transform: translateX(5px); /* Slide effect */
+}
+.check-item.met .icon {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); /* Glow */
+    transform: scale(1.3);
+}
+
+/* Status Messages */
+.status-msg {
+    text-align: center;
+    font-size: 0.9rem;
+    margin-top: 15px;
+}
+.status-msg.error {
+    color: #f87171;
+}
+.status-msg.success {
+    color: #4ade80;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.5s;
+}
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>

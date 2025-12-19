@@ -11,6 +11,9 @@ Route::middleware('web')->group(function () {
     Route::post('/otp/verify', [EmailOtpController::class, 'verify']);
     
     Route::post('/register', [RegisterController::class, 'store']);
+    
     Route::post('/login/init', [LoginController::class, 'init']);
+    Route::post('/login/password', [LoginController::class, 'verifyPassword']); // ✅ Matches Controller
+    Route::post('/login/finalize', [LoginController::class, 'login']);          // ✅ Matches Controller
 
 });
